@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Производственный Дашборд</title>
+    
+    <!-- CDN Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/customParseFormat.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 10px;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+        .container {
+            max-width: 1920px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 15px 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            min-height: calc(100vh - 20px);
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .last-update {
+            font-size: 0.95rem;
+            color: #666;
+            font-weight: 500;
+        }
+        .kpi-section {
+            display: none;
+        }
+        .kpi-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+            transition: transform 0.2s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-3px);
+        }
+        .kpi-card h3 {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            opacity: 0.9;
+            font-weight: 600;
+        }
+        .kpi-card .value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+        .kpi-card .unit {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 10px;
+            flex: 1;
+        }
+        .chart-container {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-wrapper {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            margin-bottom: 10px;
+        }
+        .top-performers {
+            background: white;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        .top-performers h4 {
+            color: #667eea;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .top-performers ol {
+            list-style-position: inside;
+            padding-left: 0;
+            margin: 0;
+        }
+        .top-performers li {
+            padding: 4px 6px;
+            margin-bottom: 3px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            border-left: 2px solid #667eea;
+            line-height: 1.3;
+        }
+        .top-performers li:last-child {
+            margin-bottom: 0;
+        }
+        .top-performers li:nth-child(1) {
+            background: #ffd700;
+            border-left-color: #ffa500;
+            font-weight: bold;
+        }
+        .top-performers li:nth-child(2) {
+            background: #e8e8e8;
+            border-left-color: #c0c0c0;
+        }
+        .top-performers li:nth-child(3) {
+            background: #f4e4c1;
+            border-left-color: #cd7f32;
+        }
+        .norms-section {
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+        .error {
+            background: #ff3b3b;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 1.2rem;
+        }
+        @media (max-width: 1400px) {
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .kpi-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (min-width: 1400px) and (max-width: 1920px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .chart-wrapper {
+                height: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="last-update" id="lastUpdate">Загрузка данных...</div>
+        </div>
+ 
+        <div id="errorContainer"></div>
+        
+        <div class="kpi-section" id="kpiSection">
+            <div class="kpi-card">
+                <h3>Приёмка</h3>
+                <div class="value" id="kpiReceiving">-</div>
+                <div class="unit">штук</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Размещение</h3>
+                <div class="value" id="kpiPlacement">-</div>
+                <div class="unit">коробов</div>
+            </div>
+            <div class="kpi-card">
+                <h3>Сборка</h3>
+                <div class="value" id="kpiPicking">-</div>
+                <div class="unit">задач</div>
+            </div>
+        </div>
+ 
+        <div class="charts-section">
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="chartReceiving"></canvas>
+                </div>
+                <div class="top-performers" id="topReceiving"></div>
+            </div>
+ 
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="chartPlacement"></canvas>
+                </div>
+                <div class="top-performers" id="topPlacement"></div>
+            </div>
+ 
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="chartPicking"></canvas>
+                </div>
+                <div class="top-performers" id="topPicking"></div>
+            </div>
+        </div>
+ 
+        <div class="norms-section">
+            <h3>📋 Нормативы (в сутки)</h3>
+            <div class="norms-grid">
+                <div class="norm-item">
+                    <div class="label">Приёмка</div>
+                    <div class="value" id="normReceiving">-</div>
+                    <div class="unit">штук</div>
+                </div>
+                <div class="norm-item">
+                    <div class="label">Размещение</div>
+                    <div class="value" id="normPlacement">-</div>
+                    <div class="unit">коробов</div>
+                </div>
+                <div class="norm-item">
+                    <div class="label">Сборка</div>
+                    <div class="value" id="normPicking">-</div>
+                    <div class="unit">задач</div>
+                </div>
+            </div>
+        </div>
+    </div>
+ 
+    <script>
+        // ============================================
+        // КОНФИГУРАЦИЯ
+        // ============================================
+        const CONFIG = {
+            DATA_PATH: 'data.xlsx',
+            REFRESH_INTERVAL_MS: 60000, // 60 секунд
+            DATE_RANGE_DAYS: 30,        // 30 дней для большей гибкости
+            TOP_N: 3,
+            
+            NORMS: {
+                receiving: 120,    // шт
+                placement: 250,    // короба
+                picking: 300       // задачи
+            },
+            
+            COLORS: {
+                LOW: '#ff3b3b',      // красный (0-70% нормы)
+                MID: '#ffcc00',      // жёлтый (70-100% нормы)
+                HIGH: '#00b050'      // зелёный (100%+ нормы)
+            }
+        };
+        // ============================================
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+        // ============================================
+        let charts = {
+            receiving: null,
+            placement: null,
+            picking: null
+        };
+        
+        let lastFileModified = null; // Отслеживание изменений файла
+        let autoRefreshTimer = null;
+        // Инициализация dayjs с плагином для парсинга
+        dayjs.extend(window.dayjs_plugin_customParseFormat);
+        // ============================================
+        // ETL: ЗАГРУЗКА И ОБРАБОТКА ДАННЫХ
+        // ============================================
+        
+        /**
+         * Загружает Excel файл и возвращает распарсенные данные
+         */
+        async function loadExcelFile(filePath) {
+            try {
+                // Добавляем timestamp для обхода кеша
+                const cacheBuster = `?t=${new Date().getTime()}`;
+                const response = await fetch(filePath + cacheBuster);
+                
+                if (!response.ok) {
+                    throw new Error(`Не удалось загрузить файл: ${response.statusText}`);
+                }
+                
+                // Проверяем дату модификации файла
+                const lastModified = response.headers.get('Last-Modified');
+                if (lastModified && lastFileModified && lastModified !== lastFileModified) {
+                    console.log('🔄 Обнаружено изменение файла, обновляем данные...');
+                }
+                lastFileModified = lastModified;
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                
+                return jsonData;
+            } catch (error) {
+                console.error('Ошибка загрузки файла:', error);
+                throw error;
+            }
+        }
+        
+        /**
+         * Проверяет изменения файла и обновляет дашборд при необходимости
+         */
+        async function checkFileChanges() {
+            try {
+                const cacheBuster = `?t=${new Date().getTime()}`;
+                const response = await fetch(CONFIG.DATA_PATH + cacheBuster, { method: 'HEAD' });
+                
+                if (response.ok) {
+                    const currentModified = response.headers.get('Last-Modified');
+                    
+                    if (lastFileModified && currentModified && currentModified !== lastFileModified) {
+                        console.log('📥 Файл изменился, автоматическое обновление...');
+                        await updateDashboard();
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка проверки файла:', error);
+            }
+        }
+        /**
+         * Парсит дату из различных форматов
+         */
+        function parseDate(dateValue) {
+            if (!dateValue) return null;
+            
+            // Если это число (Excel serial date)
+            if (typeof dateValue === 'number') {
+                const excelEpoch = new Date(1899, 11, 30);
+                const date = new Date(excelEpoch.getTime() + dateValue * 86400000);
+                return dayjs(date);
+            }
+            
+            // Если это строка
+            if (typeof dateValue === 'string') {
+                // Пробуем различные форматы
+                const formats = ['DD.MM.YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+                for (const format of formats) {
+                    const parsed = dayjs(dateValue, format, true);
+                    if (parsed.isValid()) return parsed;
+                }
+                
+                // Пробуем стандартный парсинг
+                const parsed = dayjs(dateValue);
+                if (parsed.isValid()) return parsed;
+            }
+            
+            return null;
+        }
+        /**
+         * Преобразует значение в число (обрабатывает запятые)
+         */
+        function parseNumber(value) {
+            if (typeof value === 'number') return value;
+            if (!value) return 0;
+            
+            const strValue = String(value).replace(',', '.');
+            const num = parseFloat(strValue);
+            return isNaN(num) ? 0 : num;
+        }
+        /**
+         * Парсит временной интервал HH:MM:SS в секунды
+         */
+        function parseTimeInterval(timeValue) {
+            if (!timeValue) return 0;
+            
+            const str = String(timeValue);
+            const parts = str.split(':').map(p => parseInt(p) || 0);
+            
+            if (parts.length === 3) {
+                return parts[0] * 3600 + parts[1] * 60 + parts[2];
+            } else if (parts.length === 2) {
+                return parts[0] * 60 + parts[1];
+            }
+            
+            return 0;
+        }
+        /**
+         * Фильтрует данные за последние N дней
+         */
+        function filterByDateRange(data, days) {
+            const cutoffDate = dayjs().subtract(days, 'day');
+            
+            return data.filter(row => {
+                const date = parseDate(row['Дата операций']);
+                return date && date.isAfter(cutoffDate);
+            });
+        }
+        /**
+         * Обрабатывает данные (ETL процесс)
+         */
+        function processData(rawData) {
+            // Фильтруем по дате
+            const filteredData = filterByDateRange(rawData, CONFIG.DATE_RANGE_DAYS);
+            
+            // Обрабатываем каждую строку
+            const processedData = filteredData.map(row => {
+                return {
+                    resource: row['Производственный ресурс'] || '',
+                    date: parseDate(row['Дата операций']),
+                    operation: (row['Название операции'] || '').toLowerCase().trim(),
+                    operationCount: parseNumber(row['Количество операций']),
+                    avgTime: parseNumber(row['Среднее время выполнения операции']),
+                    totalTime: parseNumber(row['Общее время выполнения всех операций']),
+                    workDuration: parseTimeInterval(row['Длительность работы']),
+                    qtyPieces: parseNumber(row['Кол-во, шт']),
+                    qtyPackages: parseNumber(row['Кол-во, уп']),
+                    qtyLines: parseNumber(row['Кол-во, строк']),
+                    weight: parseNumber(row['Вес']),
+                    volume: parseNumber(row['Объем'])
+                };
+            });
+            
+            return processedData;
+        }
+        /**
+         * Группирует данные по сотрудникам для конкретной метрики
+         */
+        function groupByEmployee(data, operationFilter, metricField) {
+            // Фильтруем по операциям
+            const filtered = data.filter(row => {
+                if (Array.isArray(operationFilter)) {
+                    return operationFilter.some(op => row.operation.includes(op));
+                } else {
+                    return row.operation.includes(operationFilter);
+                }
+            });
+            
+            // Группируем по сотрудникам
+            const grouped = _.groupBy(filtered, 'resource');
+            
+            // Вычисляем суммы
+            const result = Object.entries(grouped).map(([employee, rows]) => {
+                const total = _.sumBy(rows, metricField);
+                return {
+                    employee,
+                    value: total
+                };
+            });
+            
+            // Сортируем по убыванию
+            return _.orderBy(result, ['value'], ['desc']);
+        }
+        /**
+         * Извлекает метрики для всех категорий
+         */
+        function extractMetrics(processedData) {
+            // Приёмка: операция "приемка", метрика "qtyPieces"
+            const receiving = groupByEmployee(processedData, 'приемка', 'qtyPieces');
+            
+            // Размещение: операции "ручные перемещения" и "привязка к местам", метрика "qtyPackages"
+            const placement = groupByEmployee(
+                processedData, 
+                ['ручные перемещения', 'привязка к местам'], 
+                'qtyPackages'
+            );
+            
+            // Сборка: операция "пикинг ЗХ МЕЗОНИН RMIXED", метрика "operationCount"
+            const picking = groupByEmployee(
+                processedData, 
+                'пикинг зх мезонин rmixed', 
+                'operationCount'
+            );
+            
+            return { receiving, placement, picking };
+        }
+        // ============================================
+        // ВИЗУАЛИЗАЦИЯ
+        // ============================================
+        
+        /**
+         * Определяет цвет столбца на основе достижения нормы
+         */
+        function getBarColor(value, norm) {
+            const percentage = (value / norm) * 100;
+            
+            if (percentage < 70) {
+                return CONFIG.COLORS.LOW;    // Красный: 0-70%
+            } else if (percentage < 100) {
+                return CONFIG.COLORS.MID;    // Желтый: 70-100%
+            } else {
+                return CONFIG.COLORS.HIGH;   // Зеленый: 100%+
+            }
+        }
+        /**
+         * Вычисляет оптимальный шаг для шкалы
+         */
+        function calculateStepSize(maxValue, norm) {
+            const reference = Math.max(maxValue, norm * 2);
+            const magnitude = Math.pow(10, Math.floor(Math.log10(reference)));
+            const normalized = reference / magnitude;
+            
+            let stepSize;
+            if (normalized <= 1) stepSize = magnitude / 10;
+            else if (normalized <= 2) stepSize = magnitude / 5;
+            else if (normalized <= 5) stepSize = magnitude / 2;
+            else stepSize = magnitude;
+            
+            return Math.ceil(stepSize);
+        }
+        /**
+         * Создаёт или обновляет график
+         */
+        function createOrUpdateChart(canvasId, chartKey, data, title, norm) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Подготавливаем данные
+            const labels = data.map(d => d.employee);
+            const values = data.map(d => d.value);
+            const colors = values.map(v => getBarColor(v, norm));
+            
+            // Вычисляем общую сумму и максимальное значение
+            const total = _.sum(values);
+            const maxValue = Math.max(...values, norm * 1.2);
+            const stepSize = calculateStepSize(maxValue, norm);
+            
+            // Заголовок с общей суммой
+            const chartTitle = `${title} — Всего: ${total.toLocaleString('ru-RU')} (норма: ${norm})`;
+            
+            // Если график уже существует, обновляем его
+            if (charts[chartKey]) {
+                charts[chartKey].data.labels = labels;
+                charts[chartKey].data.datasets[0].data = values;
+                charts[chartKey].data.datasets[0].backgroundColor = colors;
+                charts[chartKey].data.datasets[1].data = new Array(labels.length).fill(norm);
+                charts[chartKey].options.plugins.title.text = chartTitle;
+                charts[chartKey].options.scales.y.ticks.stepSize = stepSize;
+                
+                // Обновляем аннотацию нормы
+                if (charts[chartKey].options.plugins.annotation) {
+                    charts[chartKey].options.plugins.annotation.annotations.normLine.yMin = norm;
+                    charts[chartKey].options.plugins.annotation.annotations.normLine.yMax = norm;
+                }
+                
+                charts[chartKey].update('none');
+                return;
+            }
+            
+            // Создаём новый график
+            charts[chartKey] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: title,
+                            data: values,
+                            backgroundColor: colors,
+                            borderColor: colors,
+                            borderWidth: 1.5,
+                            borderRadius: 6,
+                            order: 2
+                        },
+                        {
+                            label: `Норма: ${norm}`,
+                            data: new Array(labels.length).fill(norm),
+                            type: 'line',
+                            borderColor: '#e74c3c',
+                            borderWidth: 2.5,
+                            borderDash: [8, 4],
+                            fill: false,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            padding: {
+                                top: 5,
+                                bottom: 10
+                            }
+                        },
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: {
+                                size: 13,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 12
+                            },
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    const percentage = ((value / norm) * 100).toFixed(0);
+                                    return `${value} (${percentage}% от нормы)`;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                normLine: {
+                                    type: 'line',
+                                    yMin: norm,
+                                    yMax: norm,
+                                    borderColor: '#e74c3c',
+                                    borderWidth: 2.5,
+                                    borderDash: [8, 4],
+                                    label: {
+                                        display: true,
+                                        content: `Норма: ${norm}`,
+                                        position: 'start',
+                                        backgroundColor: '#e74c3c',
+                                        color: '#fff',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4,
+                                        yAdjust: -10
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: stepSize,
+                                precision: 0,
+                                font: {
+                                    size: 11,
+                                    weight: '500'
+                                },
+                                color: '#333'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.08)',
+                                lineWidth: 1
+                            },
+                            border: {
+                                display: true,
+                                color: '#999'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: 10,
+                                    weight: '500'
+                                },
+                                color: '#333',
+                                maxRotation: 45,
+                                minRotation: 30
+                            },
+                            grid: {
+                                display: false
+                            },
+                            border: {
+                                display: true,
+                                color: '#999'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        /**
+         * Обновляет KPI карточки
+         */
+        function updateKPIs(metrics) {
+            const receivingTotal = _.sumBy(metrics.receiving, 'value');
+            const placementTotal = _.sumBy(metrics.placement, 'value');
+            const pickingTotal = _.sumBy(metrics.picking, 'value');
+            
+            document.getElementById('kpiReceiving').textContent = receivingTotal.toLocaleString('ru-RU');
+            document.getElementById('kpiPlacement').textContent = placementTotal.toLocaleString('ru-RU');
+            document.getElementById('kpiPicking').textContent = pickingTotal.toLocaleString('ru-RU');
+        }
+        /**
+         * Обновляет ТОП-3 сотрудников
+         */
+        function updateTopPerformers(metrics) {
+            // ТОП-3 по приёмке
+            const topReceiving = metrics.receiving.slice(0, CONFIG.TOP_N);
+            const receivingHTML = `
+                <h4>🏆 ТОП-3 по приёмке</h4>
+                <ol>
+                    ${topReceiving.map(item => 
+                        `<li>${item.employee} — <strong>${item.value.toLocaleString('ru-RU')}</strong> шт</li>`
+                    ).join('')}
+                </ol>
+            `;
+            document.getElementById('topReceiving').innerHTML = receivingHTML;
+            
+            // ТОП-3 по размещению
+            const topPlacement = metrics.placement.slice(0, CONFIG.TOP_N);
+            const placementHTML = `
+                <h4>🏆 ТОП-3 по размещению</h4>
+                <ol>
+                    ${topPlacement.map(item => 
+                        `<li>${item.employee} — <strong>${item.value.toLocaleString('ru-RU')}</strong> коробов</li>`
+                    ).join('')}
+                </ol>
+            `;
+            document.getElementById('topPlacement').innerHTML = placementHTML;
+            
+            // ТОП-3 по сборке
+            const topPicking = metrics.picking.slice(0, CONFIG.TOP_N);
+            const pickingHTML = `
+                <h4>🏆 ТОП-3 по сборке</h4>
+                <ol>
+                    ${topPicking.map(item => 
+                        `<li>${item.employee} — <strong>${item.value.toLocaleString('ru-RU')}</strong> задач</li>`
+                    ).join('')}
+                </ol>
+            `;
+            document.getElementById('topPicking').innerHTML = pickingHTML;
+        }
+        /**
+         * Обновляет блок с нормативами
+         */
+        function updateNormsDisplay() {
+            document.getElementById('normReceiving').textContent = CONFIG.NORMS.receiving.toLocaleString('ru-RU');
+            document.getElementById('normPlacement').textContent = CONFIG.NORMS.placement.toLocaleString('ru-RU');
+            document.getElementById('normPicking').textContent = CONFIG.NORMS.picking.toLocaleString('ru-RU');
+        }
+        /**
+         * Показывает ошибку
+         */
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error">⚠️ ${message}</div>`;
+        }
+        /**
+         * Скрывает ошибку
+         */
+        function hideError() {
+            document.getElementById('errorContainer').innerHTML = '';
+        }
+        /**
+         * Обновляет время последнего обновления
+         */
+        function updateLastUpdateTime() {
+            const now = dayjs().format('HH:mm:ss');
+            document.getElementById('lastUpdate').textContent = `Обновлено: ${now}`;
+        }
+        // ============================================
+        // ОСНОВНАЯ ЛОГИКА
+        // ============================================
+        
+        /**
+         * Главная функция обновления дашборда
+         */
+        async function updateDashboard() {
+            try {
+                hideError();
+                
+                // Загружаем данные
+                const rawData = await loadExcelFile(CONFIG.DATA_PATH);
+                
+                // Обрабатываем данные (ETL)
+                const processedData = processData(rawData);
+                
+                // Извлекаем метрики
+                const metrics = extractMetrics(processedData);
+                
+                // Обновляем KPI
+                updateKPIs(metrics);
+                
+                // Обновляем графики
+                createOrUpdateChart(
+                    'chartReceiving', 
+                    'receiving', 
+                    metrics.receiving, 
+                    'Приёмка (шт)', 
+                    CONFIG.NORMS.receiving
+                );
+                
+                createOrUpdateChart(
+                    'chartPlacement', 
+                    'placement', 
+                    metrics.placement, 
+                    'Размещение (короба)', 
+                    CONFIG.NORMS.placement
+                );
+                
+                createOrUpdateChart(
+                    'chartPicking', 
+                    'picking', 
+                    metrics.picking, 
+                    'Сборка (задачи)', 
+                    CONFIG.NORMS.picking
+                );
+                
+                // Обновляем ТОП-3
+                updateTopPerformers(metrics);
+                
+                // Обновляем время
+                updateLastUpdateTime();
+                
+            } catch (error) {
+                console.error('Ошибка обновления дашборда:', error);
+                showError(`Не удалось обновить дашборд: ${error.message}`);
+            }
+        }
+        /**
+         * Инициализация приложения
+         */
+        async function init() {
+            console.log('🚀 Инициализация дашборда...');
+            
+            // Отображаем нормативы
+            updateNormsDisplay();
+            
+            // Первое обновление
+            await updateDashboard();
+            
+            // Автообновление каждые 60 секунд (основной таймер)
+            setInterval(updateDashboard, CONFIG.REFRESH_INTERVAL_MS);
+            
+            // Дополнительная проверка изменений файла каждые 5 секунд
+            // Это позволяет мгновенно реагировать на изменения файла
+            setInterval(checkFileChanges, 5000);
+            
+            console.log('✅ Дашборд готов к работе');
+            console.log('📡 Автоматическое обновление: каждые 60 сек');
+            console.log('🔍 Проверка изменений файла: каждые 5 сек');
+        }
+        // Запускаем при загрузке страницы
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
