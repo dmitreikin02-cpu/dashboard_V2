@@ -72,11 +72,40 @@
         }
         .charts-section {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            grid-template-rows: repeat(2, 1fr);
             gap: 10px;
             flex: 1;
             overflow: hidden;
+        }
+        
+        /* Стандартный layout (для Логики B) */
+        .charts-section.layout-default {
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+        }
+        
+        /* Специальный layout для Логики A */
+        .charts-section.layout-custom {
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: 1fr 1fr;
+            grid-template-areas:
+                "receiving placement"
+                "picking picking";
+        }
+        
+        .chart-container[data-area="receiving"] {
+            grid-area: receiving;
+        }
+        
+        .chart-container[data-area="placement"] {
+            grid-area: placement;
+        }
+        
+        .chart-container[data-area="picking"] {
+            grid-area: picking;
+        }
+        
+        .chart-container[data-area="control"] {
+            grid-area: control;
         }
         .chart-container {
             background: #1a1f2e;
@@ -191,11 +220,29 @@
         };
 
         // ============================================
+        // НОРМАТИВЫ (легко изменяемые)
+        // ============================================
+        const NORMS = {
+            LOGIC_A: {
+                receiving: 150,      // MOP Приёмка (шт)
+                placement: 280,      // MOP Размещение (коробов)
+                picking: 350,        // MOP Сборка (задач)
+                control: 220         // MOP Контроль (операций)
+            },
+            LOGIC_B: {
+                receiving: 120,      // Приёмка (шт)
+                placement: 250,      // Размещение (коробов)
+                picking: 300         // Сборка (задач)
+            }
+        };
+
+        // ============================================
         // ОПРЕДЕЛЕНИЕ ЛОГИК
         // ============================================
         
         const LOGIC_B = {
             name: 'Логика B (Старый дашборд)',
+            layout: 'default',
             trigger: (data) => {
                 return data.some(row => 
                     row.operation.includes('пикинг зх мезонин rmixed')
@@ -207,63 +254,75 @@
                     title: 'Приёмка (шт)',
                     operations: ['приемка'],
                     metric: 'qtyPieces',
-                    norm: 120,
-                    unit: 'шт'
+                    norm: NORMS.LOGIC_B.receiving,
+                    unit: 'шт',
+                    gridArea: 'receiving'
                 },
                 {
                     id: 'placement',
                     title: 'Размещение (короба)',
                     operations: ['ручные перемещения', 'привязка к местам'],
                     metric: 'qtyPackages',
-                    norm: 250,
-                    unit: 'коробов'
+                    norm: NORMS.LOGIC_B.placement,
+                    unit: 'коробов',
+                    gridArea: 'placement'
                 },
                 {
                     id: 'picking',
                     title: 'Сборка (задачи)',
                     operations: ['пикинг зх мезонин rmixed'],
                     metric: 'operationCount',
-                    norm: 300,
-                    unit: 'задач'
+                    norm: NORMS.LOGIC_B.picking,
+                    unit: 'задач',
+                    gridArea: 'picking'
                 }
             ]
         };
 
         const LOGIC_A = {
             name: 'Логика A (Новый дашборд)',
+            layout: 'custom',
             trigger: (data) => true,
             charts: [
-                {
-                    id: 'mop_picking',
-                    title: 'MOP Сборка',
-                    operations: ['пикинг mop зона хранения мезонин'],
-                    metric: 'operationCount',
-                    norm: 300,
-                    unit: 'задач'
-                },
                 {
                     id: 'mop_receiving',
                     title: 'MOP Приёмка',
                     operations: ['приемка'],
                     metric: 'qtyPieces',
-                    norm: 120,
-                    unit: 'шт'
+                    norm: NORMS.LOGIC_A.receiving,
+                    unit: 'шт',
+                    gridArea: 'receiving',
+                    order: 1
                 },
                 {
                     id: 'mop_placement',
                     title: 'MOP Размещение',
                     operations: ['перемещения', 'привязка к местам', 'ручные перемещения'],
                     metric: 'qtyPackages',
-                    norm: 250,
-                    unit: 'коробов'
+                    norm: NORMS.LOGIC_A.placement,
+                    unit: 'коробов',
+                    gridArea: 'placement',
+                    order: 2
+                },
+                {
+                    id: 'mop_picking',
+                    title: 'MOP Сборка',
+                    operations: ['пикинг mop зона хранения мезонин'],
+                    metric: 'operationCount',
+                    norm: NORMS.LOGIC_A.picking,
+                    unit: 'задач',
+                    gridArea: 'picking',
+                    order: 3
                 },
                 {
                     id: 'mop_control',
                     title: 'MOP Контроль',
                     operations: ['контроль'],
                     metric: 'operationCount',
-                    norm: 200,
-                    unit: 'операций'
+                    norm: NORMS.LOGIC_A.control,
+                    unit: 'операций',
+                    gridArea: 'control',
+                    order: 4
                 }
             ]
         };
@@ -612,13 +671,32 @@
             });
         }
 
-        function renderCharts(metrics) {
+        function renderCharts(metrics, logic) {
             const chartsSection = document.getElementById('chartsSection');
             chartsSection.innerHTML = '';
             
-            for (const [chartId, metric] of Object.entries(metrics)) {
+            // Применяем layout класс
+            chartsSection.className = 'charts-section';
+            if (logic && logic.layout) {
+                chartsSection.classList.add(`layout-${logic.layout}`);
+            }
+            
+            // Сортируем графики по order (для Логики A)
+            const sortedMetrics = Object.entries(metrics).sort((a, b) => {
+                const orderA = a[1].config.order || 0;
+                const orderB = b[1].config.order || 0;
+                return orderA - orderB;
+            });
+            
+            for (const [chartId, metric] of sortedMetrics) {
                 const chartDiv = document.createElement('div');
                 chartDiv.className = 'chart-container';
+                
+                // Добавляем data-area атрибут для grid positioning
+                if (metric.config.gridArea) {
+                    chartDiv.setAttribute('data-area', metric.config.gridArea);
+                }
+                
                 chartDiv.innerHTML = `
                     <div class="chart-wrapper">
                         <canvas id="chart_${chartId}"></canvas>
@@ -687,7 +765,7 @@
                     return;
                 }
                 
-                renderCharts(metrics);
+                renderCharts(metrics, logic);
                 updateLastUpdateTime(logic.name);
                 
             } catch (error) {
