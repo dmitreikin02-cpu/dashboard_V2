@@ -25,14 +25,21 @@ const server = http.createServer((req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     
-    if (url === '/' || url === '/dashboard.html') {
-        const filePath = path.join(__dirname, 'dashboard.html');
+    if (url === '/' || url === '/dashboard.html' || url === '/dashboard_mop.html' || url === '/dashboard_old.html') {
+        let fileName = 'dashboard.html';
+        if (url === '/dashboard_mop.html') {
+            fileName = 'dashboard_mop.html';
+        } else if (url === '/dashboard_old.html') {
+            fileName = 'dashboard_old.html';
+        }
+        
+        const filePath = path.join(__dirname, fileName);
         
         fs.readFile(filePath, (err, data) => {
             if (err) {
                 res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('Ошибка загрузки дашборда');
-                console.error('Ошибка чтения dashboard.html:', err);
+                res.end(`Ошибка загрузки ${fileName}`);
+                console.error(`Ошибка чтения ${fileName}:`, err);
                 return;
             }
             
@@ -89,8 +96,10 @@ server.listen(PORT, HOST, () => {
     console.log(`📡 Сервер работает на: http://localhost:${PORT}`);
     console.log(`🌐 Доступен по адресу: http://${HOST}:${PORT}`);
     console.log('');
-    console.log('📋 Доступные адреса:');
-    console.log(`   • Дашборд: http://localhost:${PORT}/`);
+    console.log('📋 Доступные дашборды:');
+    console.log(`   • Универсальный: http://localhost:${PORT}/dashboard.html`);
+    console.log(`   • MOP (Логика A): http://localhost:${PORT}/dashboard_mop.html`);
+    console.log(`   • Старый (Логика B): http://localhost:${PORT}/dashboard_old.html`);
     console.log(`   • Excel данные: http://localhost:${PORT}/excel`);
     console.log('');
     console.log('🔄 Дашборд автоматически обновляется каждые 60 секунд');

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Производственный Дашборд</title>
+    <title>Старый Дашборд (Логика B)</title>
     
     <!-- CDN Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -162,7 +162,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Производственный Дашборд</h1>
+            <h1>Старый Дашборд</h1>
             <div class="last-update" id="lastUpdate">Загрузка данных...</div>
         </div>
  
@@ -194,103 +194,47 @@
         // НОРМАТИВЫ (легко изменяемые)
         // ============================================
         const NORMS = {
-            LOGIC_A: {
-                receiving: 150,      // MOP Приёмка (шт)
-                placement: 280,      // MOP Размещение (коробов)
-                picking: 350,        // MOP Сборка (задач)
-                control: 220         // MOP Контроль (операций)
-            },
-            LOGIC_B: {
-                receiving: 120,      // Приёмка (шт)
-                placement: 250,      // Размещение (коробов)
-                picking: 300         // Сборка (задач)
-            }
+            receiving: 120,      // Приёмка (шт)
+            placement: 250,      // Размещение (коробов)
+            picking: 300         // Сборка (задач)
         };
 
         // ============================================
-        // ОПРЕДЕЛЕНИЕ ЛОГИК
+        // ОПРЕДЕЛЕНИЕ ГРАФИКОВ (СТАРАЯ ЛОГИКА)
         // ============================================
         
-        const LOGIC_B = {
-            name: 'Логика B (Старый дашборд)',
-            trigger: (data) => {
-                return data.some(row => 
-                    row.operation.includes('пикинг зх мезонин rmixed')
-                );
+        const CHARTS_CONFIG = [
+            {
+                id: 'receiving',
+                title: 'Приёмка (шт)',
+                operations: ['приемка'],
+                metric: 'qtyPieces',
+                norm: NORMS.receiving,
+                unit: 'шт'
             },
-            charts: [
-                {
-                    id: 'receiving',
-                    title: 'Приёмка (шт)',
-                    operations: ['приемка'],
-                    metric: 'qtyPieces',
-                    norm: NORMS.LOGIC_B.receiving,
-                    unit: 'шт'
-                },
-                {
-                    id: 'placement',
-                    title: 'Размещение (короба)',
-                    operations: ['ручные перемещения', 'привязка к местам'],
-                    metric: 'qtyPackages',
-                    norm: NORMS.LOGIC_B.placement,
-                    unit: 'коробов'
-                },
-                {
-                    id: 'picking',
-                    title: 'Сборка (задачи)',
-                    operations: ['пикинг зх мезонин rmixed'],
-                    metric: 'operationCount',
-                    norm: NORMS.LOGIC_B.picking,
-                    unit: 'задач'
-                }
-            ]
-        };
-
-        const LOGIC_A = {
-            name: 'Логика A (Новый дашборд)',
-            trigger: (data) => true,
-            charts: [
-                {
-                    id: 'mop_receiving',
-                    title: 'MOP Приёмка',
-                    operations: ['приемка'],
-                    metric: 'qtyPieces',
-                    norm: NORMS.LOGIC_A.receiving,
-                    unit: 'шт'
-                },
-                {
-                    id: 'mop_placement',
-                    title: 'MOP Размещение',
-                    operations: ['перемещения', 'привязка к местам', 'ручные перемещения'],
-                    metric: 'qtyPackages',
-                    norm: NORMS.LOGIC_A.placement,
-                    unit: 'коробов'
-                },
-                {
-                    id: 'mop_picking',
-                    title: 'MOP Сборка',
-                    operations: ['пикинг mop зона хранения мезонин'],
-                    metric: 'operationCount',
-                    norm: NORMS.LOGIC_A.picking,
-                    unit: 'задач'
-                },
-                {
-                    id: 'mop_control',
-                    title: 'MOP Контроль',
-                    operations: ['контроль'],
-                    metric: 'operationCount',
-                    norm: NORMS.LOGIC_A.control,
-                    unit: 'операций'
-                }
-            ]
-        };
+            {
+                id: 'placement',
+                title: 'Размещение (короба)',
+                operations: ['ручные перемещения', 'привязка к местам'],
+                metric: 'qtyPackages',
+                norm: NORMS.placement,
+                unit: 'коробов'
+            },
+            {
+                id: 'picking',
+                title: 'Сборка (задачи)',
+                operations: ['пикинг зх мезонин rmixed'],
+                metric: 'operationCount',
+                norm: NORMS.picking,
+                unit: 'задач'
+            }
+        ];
 
         // ============================================
         // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
         // ============================================
         let charts = {};
         let lastFileModified = null;
-        let currentLogic = null;
 
         dayjs.extend(window.dayjs_plugin_customParseFormat);
 
@@ -422,18 +366,10 @@
             return _.orderBy(result, ['value'], ['desc']);
         }
 
-        function selectLogic(processedData) {
-            if (LOGIC_B.trigger(processedData)) {
-                return LOGIC_B;
-            } else {
-                return LOGIC_A;
-            }
-        }
-
-        function extractMetricsForLogic(processedData, logic) {
+        function extractMetrics(processedData) {
             const metrics = {};
             
-            for (const chart of logic.charts) {
+            for (const chart of CHARTS_CONFIG) {
                 const data = groupByEmployee(processedData, chart.operations, chart.metric);
                 if (data.length > 0) {
                     metrics[chart.id] = {
@@ -672,12 +608,11 @@
             document.getElementById('errorContainer').innerHTML = '';
         }
 
-        function updateLastUpdateTime(logicName) {
+        function updateLastUpdateTime() {
             const now = dayjs().format('HH:mm:ss DD.MM.YYYY');
-            const logicClass = logicName.includes('A') ? 'logic-a' : 'logic-b';
             document.getElementById('lastUpdate').innerHTML = `
                 Обновлено: ${now}
-                <span class="${logicClass}">${logicName}</span>
+                <span class="logic-b">Старая Логика</span>
             `;
         }
 
@@ -692,12 +627,9 @@
                 const rawData = await loadExcelFile();
                 const processedData = processData(rawData);
                 
-                const logic = selectLogic(processedData);
-                currentLogic = logic;
+                console.log('📊 Старый дашборд загружает данные...');
                 
-                console.log(`📊 Выбрана ${logic.name}`);
-                
-                const metrics = extractMetricsForLogic(processedData, logic);
+                const metrics = extractMetrics(processedData);
                 
                 if (Object.keys(metrics).length === 0) {
                     showError('Нет данных для отображения графиков');
@@ -705,7 +637,7 @@
                 }
                 
                 renderCharts(metrics);
-                updateLastUpdateTime(logic.name);
+                updateLastUpdateTime();
                 
             } catch (error) {
                 console.error('Ошибка обновления дашборда:', error);
